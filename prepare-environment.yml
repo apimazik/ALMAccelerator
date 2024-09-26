@@ -1,0 +1,212 @@
+trigger:
+- none
+ 
+pr:
+- none
+ 
+pool:
+  vmImage: 'windows-latest'
+ 
+parameters:
+- name: AgentPool
+  type: string
+  default: null
+ 
+- name: Data
+  type: object
+  default: []
+ 
+- name: Email
+  type: string
+  default: null
+ 
+- name: EnvironmentName
+  type: string
+  default: null
+ 
+- name: Project
+  type: string
+  default: null
+ 
+- name: ServiceConnectionName
+  type: string
+  default: null
+ 
+- name: ServiceConnectionUrl
+  type: string
+  default: null
+ 
+- name: UserName
+  type: string
+  default: null
+ 
+- name: VMImage
+  type: string
+  default: null
+  
+- name: Repo
+  type: string
+  default: null
+ 
+- name: SolutionName
+  type: string
+  default: null
+ 
+- name: CommitMessage
+  type: string
+  default: null
+ 
+- name: Branch
+  type: string
+  default: null
+ 
+- name: BranchToCreate
+  type: string
+  default: null
+ 
+- name: BuildDefinitionId
+  type: string
+  default: null
+ 
+- name: PipelineId
+  type: string
+  default: null
+ 
+- name: ImportUnmanaged
+  type: string
+  default: null
+ 
+- name: PortalSiteName
+  type: string
+  default: null
+ 
+- name: PublishCustomizations
+  type: string
+  default: null
+ 
+- name: CommitScope
+  type: string
+  default: null
+ 
+ #steps/values passed through Data parameter
+
+- name: ManagedUnmanaged
+  type: string
+  default: null
+- name: PackageName
+  type: string
+  default: null
+- name: SourceBranch
+  type: string
+  default: null
+- name: SourcePath
+  type: string
+  default: null
+- name: SourceRepository
+  type: string
+  default: null
+- name: StepName
+  type: string
+  default: null
+- name: StepNumber
+  type: string
+  default: null
+- name: UseExistingPackage
+  type: boolean
+  default: true
+- name: PreparationType
+  type: string
+  default: null
+
+jobs:
+- job: ProcessSteps
+  displayName: 'Process Steps from JSON'
+  steps:
+
+  - ${{ each step in parameters.Data }}:
+    - checkout: git://${{ parameters.Project }}/${{ step.SourceRepository }}@${{ step.SourceBranch }}
+    - script: |
+        echo "Processing Step: ${{ step.StepNumber }}"
+      displayName: 'Processing Step ${{ step.StepNumber }}'
+
+    - task: PowerPlatformToolInstaller@2
+      inputs:
+        DefaultVersion: true
+ 
+    - ${{ if eq(step.UseExistingPackage, true) }}:
+ 
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.SourcesDirectory)/${{ step.SourceRepository }}/${{ step.SourcePath }}'
+          ArtifactName: ${{ step.StepName }}
+          publishLocation: 'Container'
+        condition: eq(${{ step.PreparationType }}, '100000000')
+        continueOnError: true
+        displayName: Artifact_existing_solution ${{ step.StepName }}
+ 
+      - task: PowerPlatformImportSolution@2
+        inputs:
+          authenticationType: 'PowerPlatformSPN'
+          PowerPlatformSPN: ${{ parameters.ServiceConnectionName }}
+          Environment: ${{ parameters.ServiceConnectionUrl }}
+          SolutionInputFile: '$(Build.SourcesDirectory)/${{ step.SourceRepository }}/${{ step.SourcePath }}'
+          AsyncOperation: true
+          MaxAsyncWaitTime: '60'
+        condition: eq(${{ step.PreparationType }}, '100000000')
+        continueOnError: true
+        displayName: Import_existing_solution ${{ step.StepName }}
+ 
+      - task: PowerPlatformImportData@2
+        inputs:
+          authenticationType: 'PowerPlatformSPN'
+          PowerPlatformSPN: ${{ parameters.ServiceConnectionName }}
+          Environment: ${{ parameters.ServiceConnectionUrl }}
+          DataFile: '$(Build.SourcesDirectory)/${{ step.SourceRepository }}/${{ step.SourcePath }}'
+        condition: eq(${{ step.PreparationType }}, '100000001')
+        continueOnError: true
+        displayName: ImportData ${{ step.StepName }}
+
+    - ${{ if eq(step.UseExistingPackage, false) }}:
+      - ${{ if eq(step.ManagedUnmanaged, '100000000') }}:
+ 
+        - task: PowerPlatformPackSolution@2
+          inputs:
+            SolutionSourceFolder: '$(Build.SourcesDirectory)/${{ step.SourceRepository }}/${{ step.SourcePath }}'
+            SolutionOutputFile: $(Build.ArtifactStagingDirectory)/${{ step.PackageName }}
+            SolutionType: Managed
+          condition: eq(${{ step.PreparationType}}, '100000000')
+          continueOnError: true
+          displayName: Pack_New_Managed_solution ${{ step.StepName }}
+ 
+      - ${{ if eq(step.ManagedUnmanaged, '100000001') }}:
+ 
+        - task: PowerPlatformPackSolution@2
+          inputs:
+            SolutionSourceFolder: '$(Build.SourcesDirectory)/${{ step.SourceRepository }}/${{ step.SourcePath }}'
+            SolutionOutputFile: $(Build.ArtifactStagingDirectory)/${{ step.PackageName }}
+            SolutionType: Unmanaged
+          condition: eq(${{ step.PreparationType}}, '100000000')
+          continueOnError: true
+          displayName: Pack_New_Unmanaged_solution ${{ step.StepName }}
+ 
+ 
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+          ArtifactName: ${{ step.PackageName }}
+          publishLocation: 'Container'
+        condition:  eq(${{ step.PreparationType}}, '100000000')
+        continueOnError: true
+        displayName: Artifact_New_solution ${{ step.StepName }}
+ 
+      - task: PowerPlatformImportSolution@2
+        inputs:
+          authenticationType: 'PowerPlatformSPN'
+          PowerPlatformSPN: ${{ parameters.ServiceConnectionName }}
+          Environment: ${{ parameters.ServiceConnectionUrl }}
+          SolutionInputFile: $(Build.ArtifactStagingDirectory)/${{ step.PackageName }}
+          AsyncOperation: true
+          MaxAsyncWaitTime: '60'
+        condition:  eq(${{ step.PreparationType}}, '100000000')
+        continueOnError: true
+        displayName: Import_New_solution ${{ step.StepName }}
