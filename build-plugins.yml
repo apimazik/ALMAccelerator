@@ -1,0 +1,115 @@
+trigger:
+- none
+ 
+pr:
+- none
+ 
+pool:
+  vmImage: 'windows-latest'
+
+parameters:
+- name: WorkflowEnabled
+  displayName: WorkflowExists
+  type: boolean
+  default: False
+  values:
+  - True
+  - False
+
+jobs:
+ 
+- job: BuildPlugins
+  steps:
+    - checkout: git://$(SourceProject)/$(SourceRepo)@$(SourceBranch)
+
+    - task: NuGetToolInstaller@1
+      inputs:
+        versionSpec: '6.10.2'
+      condition: eq(variables['PluginType'], 'Package')
+
+    - task: NuGetCommand@2
+      inputs:
+        command: 'restore'
+        restoreSolution: $(SolutionFilePath)
+        feedsToUse: 'select'
+      condition: eq(variables['PluginType'], 'Package')
+
+    - task: VSBuild@1
+      inputs:
+        solution: $(SolutionFilePath)
+      condition: eq(variables['PluginType'], 'Package')
+
+    - task: PowerShell@2
+      displayName: 'Rename Plugin File'
+      inputs:
+        targetType: 'inline'
+        script: |
+            Rename-Item -Path $(OldNameAndPathOfPluginFile) -NewName $(NewNameOfPluginFile)
+      condition: eq(variables['PluginType'], 'Package')
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)/$(PluginSourcePath)'
+        Contents: '$(NewNameOfPluginFile)'
+        TargetFolder: '$(Build.SourcesDirectory)/$(PluginDestinationPath)'
+        OverWrite: true
+      condition: eq(variables['PluginType'], 'Package')
+
+#Assemblies
+
+    - task: VSBuild@1
+      inputs:
+        solution: $(SolutionFilePath)
+      condition: eq(variables['PluginType'], 'Assemblies')
+
+    - task: PowerShell@2
+      displayName: 'Rename assembly File'
+      inputs:
+        targetType: 'inline'
+        script: |
+            Rename-Item -Path $(OldNameAndPathOfPluginFile) -NewName $(NewNameOfPluginFile)
+      condition: eq(variables['PluginType'], 'Assemblies')
+
+    - task: CopyFiles@2
+      displayName: 'copy dll file'
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)/$(PluginSourcePath)'
+        Contents: '$(NewNameOfPluginFile)'
+        TargetFolder: '$(Build.SourcesDirectory)/$(PluginDestinationPath)'
+        OverWrite: true
+      condition: eq(variables['PluginType'], 'Assemblies')
+
+
+
+#Workflows
+    - task: NuGetToolInstaller@1
+      inputs:
+        versionSpec: '6.10.2'
+      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+
+    - task: NuGetCommand@2
+      inputs:
+        command: 'restore'
+        restoreSolution: $(WorkflowSolutionFilePath)
+        feedsToUse: 'select'
+      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+    - task: VSBuild@1
+      inputs:
+        solution: $(WorkflowSolutionFilePath)
+      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+
+    - task: PowerShell@2
+      displayName: 'Rename Workflow File'
+      inputs:
+        targetType: 'inline'
+        script: |
+            Rename-Item -Path $(WorkflowFileOldName&Path) -NewName $(WorkflowFileNewName)
+      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)/$(WorkflowFileSourcePath)'
+        Contents: '$(WorkflowFileNewName)'
+        TargetFolder: '$(Build.SourcesDirectory)/$(WorkflowFileDestinationPath)'
+        OverWrite: true
+      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
