@@ -7,15 +7,6 @@ pr:
 pool:
   vmImage: 'windows-latest'
 
-parameters:
-- name: WorkflowEnabled
-  displayName: WorkflowExists
-  type: boolean
-  default: False
-  values:
-  - True
-  - False
-
 jobs:
  
 - job: BuildPlugins
@@ -79,24 +70,22 @@ jobs:
         OverWrite: true
       condition: eq(variables['PluginType'], 'Assemblies')
 
-
-
 #Workflows
     - task: NuGetToolInstaller@1
       inputs:
         versionSpec: '6.10.2'
-      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+      condition: eq(variables['WorkflowEnabled'], 'true')
 
     - task: NuGetCommand@2
       inputs:
         command: 'restore'
         restoreSolution: $(WorkflowSolutionFilePath)
         feedsToUse: 'select'
-      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+      condition: eq(variables['WorkflowEnabled'], 'true')
     - task: VSBuild@1
       inputs:
         solution: $(WorkflowSolutionFilePath)
-      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+      condition: eq(variables['WorkflowEnabled'], 'true')
 
     - task: PowerShell@2
       displayName: 'Rename Workflow File'
@@ -104,7 +93,7 @@ jobs:
         targetType: 'inline'
         script: |
             Rename-Item -Path $(WorkflowFileOldName&Path) -NewName $(WorkflowFileNewName)
-      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+      condition: eq(variables['WorkflowEnabled'], 'true')
 
     - task: CopyFiles@2
       inputs:
@@ -112,4 +101,4 @@ jobs:
         Contents: '$(WorkflowFileNewName)'
         TargetFolder: '$(Build.SourcesDirectory)/$(WorkflowFileDestinationPath)'
         OverWrite: true
-      condition: ${{ eq(parameters.WorkflowEnabled, true) }}
+      condition: eq(variables['WorkflowEnabled'], 'true')
